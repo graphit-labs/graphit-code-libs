@@ -82,6 +82,15 @@ jobs:
             gzip
             unzip
 
+      - name: Cache LanceDB source build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            graphit-code/.cache/lancedb
+          key: lancedb-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('graphit-code-lib/native-deps.env') }}
+
       - name: Build patched LanceDB
         shell: msys2 {0}
         if: runner.os == 'Windows'
@@ -111,6 +120,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.sha256
+          compression-level: 0
           retention-days: 7
 
   publish:

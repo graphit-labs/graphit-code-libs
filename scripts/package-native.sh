@@ -19,6 +19,14 @@ hash_file() {
   fi
 }
 
+hash_text_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sed 's/\r$//' "$1" | sha256sum | awk '{print $1}'
+  else
+    sed 's/\r$//' "$1" | shasum -a 256 | awk '{print $1}'
+  fi
+}
+
 download() {
   local url=$1
   local destination=$2
@@ -37,7 +45,7 @@ if [ "$(git -C "$source_dir" rev-parse HEAD)" != "$GRAPHIT_CODE_REF" ]; then
   echo "graphit-code checkout does not match GRAPHIT_CODE_REF" >&2
   exit 1
 fi
-if [ "$(hash_file "$source_dir/patches/lancedb-go-main.patch")" != "$LANCEDB_PATCH_SHA256" ]; then
+if [ "$(hash_text_file "$source_dir/patches/lancedb-go-main.patch")" != "$LANCEDB_PATCH_SHA256" ]; then
   echo "LanceDB patch does not match LANCEDB_PATCH_SHA256" >&2
   exit 1
 fi
