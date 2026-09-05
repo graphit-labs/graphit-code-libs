@@ -1,0 +1,146 @@
+name: Publish native dependency bundles
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - native-deps.env
+      - scripts/package-native.sh
+      - .github/workflows/publish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            os: ubuntu-22.04
+          - platform: darwin-arm64
+            os: macos-14
+          - platform: windows-amd64
+            os: windows-2022
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout bundle repository
+        uses: actions/checkout@v4
+        with:
+          path: graphit-code-lib
+
+      - name: Read dependency recipe
+        run: source graphit-code-lib/native-deps.env && echo "GRAPHIT_CODE_REF=$GRAPHIT_CODE_REF" >> "$GITHUB_ENV"
+
+      - name: Checkout Graphit Code build recipe
+        uses: actions/checkout@v4
+        with:
+          repository: graphit-labs/graphit-code
+          ref: ${{ env.GRAPHIT_CODE_REF }}
+          path: graphit-code
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: graphit-code/go.mod
+          cache: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libprotobuf-dev protobuf-compiler
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Set up MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-protobuf
+            make
+            curl
+            tar
+            gzip
+            unzip
+
+      - name: Build patched LanceDB
+        shell: msys2 {0}
+        if: runner.os == 'Windows'
+        run: |
+          cd graphit-code
+          make fetch-lancedb LANCEDB_CACHE="$(pwd)/.cache/lancedb" LANCEDB_LIB_DIR="$(pwd)/.native"
+
+      - name: Build patched LanceDB
+        if: runner.os != 'Windows'
+        run: |
+          cd graphit-code
+          make fetch-lancedb LANCEDB_CACHE="$PWD/.cache/lancedb" LANCEDB_LIB_DIR="$PWD/.native"
+
+      - name: Package verified bundle
+        shell: msys2 {0}
+        if: runner.os == 'Windows'
+        run: bash graphit-code-lib/scripts/package-native.sh "${{ matrix.platform }}" "$PWD/graphit-code" "$PWD/dist"
+
+      - name: Package verified bundle
+        if: runner.os != 'Windows'
+        run: bash graphit-code-lib/scripts/package-native.sh "${{ matrix.platform }}" "$PWD/graphit-code" "$PWD/dist"
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphit-native-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          retention-days: 7
+
+  publish:
+    name: Publish immutable bundle release
+    needs: build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify archives
+        run: cd dist && sha256sum -c *.sha256
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source native-deps.env
+          tag="native-${NATIVE_RECIPE_VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists; recipe versions are immutable" >&2
+            exit 1
+          fi
+          gh release create "$tag" dist/* native-deps.env \
+            --title "Graphit native dependencies ${NATIVE_RECIPE_VERSION}" \
+            --notes "Verified native dependencies for Graphit Code. See native-deps.env and the per-platform SHA-256 files."
