@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - native-deps.env
+      - Makefile
+      - patches/lancedb-go-main.patch
+      - scripts/build-lancedb.sh
       - scripts/package-native.sh
       - .github/workflows/publish.yml
 
@@ -34,23 +37,7 @@ jobs:
       - name: Checkout bundle repository
         uses: actions/checkout@v4
         with:
-          path: graphit-code-lib
-
-      - name: Read dependency recipe
-        run: source graphit-code-lib/native-deps.env && echo "GRAPHIT_CODE_REF=$GRAPHIT_CODE_REF" >> "$GITHUB_ENV"
-
-      - name: Checkout Graphit Code build recipe
-        uses: actions/checkout@v4
-        with:
-          repository: graphit-labs/graphit-code
-          ref: ${{ env.GRAPHIT_CODE_REF }}
-          path: graphit-code
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: graphit-code/go.mod
-          cache: false
+          path: graphit-code-libs
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -88,30 +75,28 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            graphit-code/.cache/lancedb
-          key: lancedb-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('graphit-code-lib/native-deps.env') }}
+            graphit-code-libs/.cache/lancedb
+          key: lancedb-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('graphit-code-libs/native-deps.env', 'graphit-code-libs/patches/lancedb-go-main.patch') }}
 
       - name: Build patched LanceDB
         shell: msys2 {0}
         if: runner.os == 'Windows'
         run: |
-          cd graphit-code
-          make fetch-lancedb LANCEDB_CACHE="$(pwd)/.cache/lancedb" LANCEDB_LIB_DIR="$(pwd)/.native"
+          make -C graphit-code-libs lancedb-native PLATFORM=windows-amd64 LANCEDB_CACHE="$PWD/graphit-code-libs/.cache/lancedb" LANCEDB_LIB_DIR="$PWD/.native"
 
       - name: Build patched LanceDB
         if: runner.os != 'Windows'
         run: |
-          cd graphit-code
-          make fetch-lancedb LANCEDB_CACHE="$PWD/.cache/lancedb" LANCEDB_LIB_DIR="$PWD/.native"
+          make -C graphit-code-libs lancedb-native PLATFORM="${{ matrix.platform }}" LANCEDB_CACHE="$PWD/graphit-code-libs/.cache/lancedb" LANCEDB_LIB_DIR="$PWD/.native"
 
       - name: Package verified bundle
         shell: msys2 {0}
         if: runner.os == 'Windows'
-        run: bash graphit-code-lib/scripts/package-native.sh "${{ matrix.platform }}" "$PWD/graphit-code" "$PWD/dist"
+        run: bash graphit-code-libs/scripts/package-native.sh "${{ matrix.platform }}" "$PWD/.native" "$PWD/dist"
 
       - name: Package verified bundle
         if: runner.os != 'Windows'
-        run: bash graphit-code-lib/scripts/package-native.sh "${{ matrix.platform }}" "$PWD/graphit-code" "$PWD/dist"
+        run: bash graphit-code-libs/scripts/package-native.sh "${{ matrix.platform }}" "$PWD/.native" "$PWD/dist"
 
       - name: Upload bundle
         uses: actions/upload-artifact@v4

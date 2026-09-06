@@ -6,7 +6,7 @@ repo_dir=$(cd "$script_dir/.." && pwd)
 source "$repo_dir/native-deps.env"
 
 platform=${1:?platform is required}
-source_dir=$(cd "${2:?graphit-code source directory is required}" && pwd)
+native_dir=$(cd "${2:?native library directory is required}" && pwd)
 output_dir=${3:?output directory is required}
 mkdir -p "$output_dir"
 output_dir=$(cd "$output_dir" && pwd)
@@ -41,11 +41,7 @@ download() {
   mv "$destination.tmp" "$destination"
 }
 
-if [ "$(git -C "$source_dir" rev-parse HEAD)" != "$GRAPHIT_CODE_REF" ]; then
-  echo "graphit-code checkout does not match GRAPHIT_CODE_REF" >&2
-  exit 1
-fi
-if [ "$(hash_text_file "$source_dir/patches/lancedb-go-main.patch")" != "$LANCEDB_PATCH_SHA256" ]; then
+if [ "$(hash_text_file "$repo_dir/patches/lancedb-go-main.patch")" != "$LANCEDB_PATCH_SHA256" ]; then
   echo "LanceDB patch does not match LANCEDB_PATCH_SHA256" >&2
   exit 1
 fi
@@ -93,8 +89,8 @@ bundle_name="graphit-native-${NATIVE_RECIPE_VERSION}-${platform}"
 bundle_dir="$work_dir/$bundle_name"
 mkdir -p "$bundle_dir/lancedb" "$bundle_dir/ladybug" "$bundle_dir/onnxruntime"
 
-cp -L "$source_dir/.native/$lancedb_name" "$bundle_dir/lancedb/$lancedb_name"
-cp "$source_dir/.native/lancedb_go_build.sha" "$bundle_dir/lancedb/lancedb_go_build.sha"
+cp -L "$native_dir/$lancedb_name" "$bundle_dir/lancedb/$lancedb_name"
+cp "$native_dir/lancedb_go_build.sha" "$bundle_dir/lancedb/lancedb_go_build.sha"
 
 download \
   "https://github.com/LadybugDB/ladybug/releases/download/v${LBUG_VERSION}/${lbug_archive}" \
@@ -130,7 +126,7 @@ cat > "$bundle_dir/manifest.json" <<EOF
   "schema": 1,
   "recipe": "${NATIVE_RECIPE_VERSION}",
   "platform": "${platform}",
-  "graphit_code_ref": "${GRAPHIT_CODE_REF}",
+  "recipe_repository": "graphit-labs/graphit-code-libs",
   "lancedb_go_ref": "${LANCEDB_GO_REF}",
   "lancedb_core_ref": "${LANCEDB_CORE_REF}",
   "lancedb_patch_sha256": "${LANCEDB_PATCH_SHA256}",
