@@ -126,7 +126,7 @@ cat > "$bundle_dir/manifest.json" <<EOF
   "schema": 1,
   "recipe": "${NATIVE_RECIPE_VERSION}",
   "platform": "${platform}",
-  "recipe_repository": "graphit-labs/graphit-code-libs",
+  "recipe_repository": "graphit-labs/graphit-libs",
   "lancedb_go_ref": "${LANCEDB_GO_REF}",
   "lancedb_core_ref": "${LANCEDB_CORE_REF}",
   "lancedb_patch_sha256": "${LANCEDB_PATCH_SHA256}",

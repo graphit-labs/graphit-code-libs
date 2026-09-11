@@ -1,0 +1,11 @@
+{
+  "project": {
+    "id": "01M1YEQS8CW5XCEMXG0HSBHJMG",
+    "name": "graphit-labs-graphit-libs",
+    "description": "Graphit's runtime libs."
+  },
+  "agents": [
+    "codex"
+  ],
+  "artifacts": {}
+}
